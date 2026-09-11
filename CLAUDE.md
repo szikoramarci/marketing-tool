@@ -140,7 +140,8 @@ Unit tesztet csak kérésre írj.
 
 ## Lokális fejlesztés
 
-- WSL2 (Ubuntu) + Docker Desktop. A repó a Linux fájlrendszerben van (`~/code/...`), soha nem `/mnt/c` alatt.
+- Natív Windows + Docker Desktop (nincs Ubuntu WSL-disztribúció telepítve). A repó Windows natív útvonalon van (`D:\Projects\marketing-tool`), bind mountolva a Sail-konténerekbe. A `vendor/laravel/sail/bin/sail` szkript alapból csak macOS/Linuxot (WSL2-t) ismer fel; a `composer.json` `post-autoload-dump` szkriptje a `scripts/patch-sail-for-windows.php`-n keresztül minden telepítés után automatikusan foltozza, hogy Git Bash/MSYS alól is fusson.
+- Bind mountolt Windows könyvtárban új fájlok/mappák néha root-tulajdonúként jönnek létre a konténerben, amit a `sail` felhasználó nem tud írni (pl. `storage/`, `bootstrap/cache/`). Ha ilyen jogosultsági hibát (`Permission denied`) látsz, futtasd: `./vendor/bin/sail root-shell -c "chown -R sail:sail /var/www/html"`.
 - A lokális Postgres a `compose.yaml`-ban `fsync=off`, `synchronous_commit=off`, `full_page_writes=off` kapcsolókkal fut (csak fejlesztéshez).
 - `migrate:fresh --seed`: demó kampány kvízzel és szegmensekkel, minden állapotban legalább egy leaddel, valamint admin felhasználó (`admin@example.com` / `password`).
 - A `.env.example`-ben minden külső szolgáltatás `fake` driverrel szerepel. Valódi sandbox kulcsok csak a `.env`-ben vannak; azt ne olvasd, új kulcsot a `.env.example`-be vegyél fel.
