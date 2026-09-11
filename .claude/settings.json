@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./vendor/bin/sail artisan test*)",
+      "Bash(./vendor/bin/sail pint*)"
+    ],
+    "ask": [
+      "Edit(./tests/Feature/Scenarios/**)",
+      "Edit(./tests/Feature/StateMachine/**)",
+      "Bash(git push*)"
+    ],
+    "deny": [
+      "Read(./.env)"
+    ]
+  }
+}
