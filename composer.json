@@ -12,6 +12,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "laravel/boost": "*",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
@@ -52,7 +53,7 @@
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi",
-            "@php -r \"$f='vendor/laravel/sail/bin/sail'; if (is_file($f)) { $c=file_get_contents($f); if (!str_contains($c, 'MINGW')) { file_put_contents($f, str_replace('Darwin*)            MACHINE=mac;;', \\\"Darwin*)            MACHINE=mac;;\\n    MINGW*|MSYS*|CYGWIN*) MACHINE=linux;;\\\", $c)); } }\""
+            "@php scripts/patch-sail-for-windows.php"
         ],
         "post-update-cmd": [
             "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
