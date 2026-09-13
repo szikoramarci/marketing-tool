@@ -12,8 +12,8 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('campaign_id')->constrained()->cascadeOnDelete();
             $table->foreignUlid('config_version_id')->constrained()->cascadeOnDelete();
-            $table->json('answers');
-            $table->string('answers_hash')->index();
+            $table->json('answers')->nullable();
+            $table->string('answers_hash')->nullable()->index();
             $table->json('result')->nullable();
             $table->boolean('is_preview')->default(false);
             $table->boolean('is_bot_suspected')->default(false);

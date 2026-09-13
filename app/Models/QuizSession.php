@@ -36,7 +36,7 @@ class QuizSession extends Model
     protected static function booted(): void
     {
         static::saving(function (self $session) {
-            if ($session->isDirty('answers')) {
+            if ($session->isDirty('answers') && $session->answers !== null) {
                 $session->answers_hash = ContentHash::compute($session->answers);
             }
         });
