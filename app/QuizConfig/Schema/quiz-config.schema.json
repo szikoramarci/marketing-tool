@@ -1,0 +1,475 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://marketing-tool.local/schemas/quiz-config.schema.json",
+  "title": "Quiz config version",
+  "description": "An immutable, self-contained quiz definition: questions, labels, evaluation groups, result page content, and email templates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version_id",
+    "content_hash",
+    "created_at",
+    "created_by",
+    "status",
+    "locale",
+    "experiment_compatible_with_previous",
+    "generation_trace",
+    "labels",
+    "questions",
+    "evaluation_groups",
+    "modules",
+    "module_settings",
+    "emails"
+  ],
+  "properties": {
+    "version_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for this config version."
+    },
+    "content_hash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable hash of the semantic content (excludes metadata such as created_at/created_by)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "archived"]
+    },
+    "locale": {
+      "type": "string",
+      "minLength": 2
+    },
+    "experiment_compatible_with_previous": {
+      "type": "boolean",
+      "description": "Whether stats from this version may be merged with the previous version's."
+    },
+    "generation_trace": {
+      "description": "Provenance of this version's content. Null for hand-authored configs.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source_reference", "instructions", "model"],
+          "properties": {
+            "source_reference": { "type": "string", "minLength": 1 },
+            "instructions": { "type": "string" },
+            "model": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "labels": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/label" }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/question" }
+    },
+    "evaluation_groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/evaluationGroup" },
+      "contains": {
+        "type": "object",
+        "properties": { "is_fallback": { "const": true } },
+        "required": ["is_fallback"]
+      },
+      "description": "Must contain exactly one fallback group (enforced by the section-5 validator; schema only checks at least one)."
+    },
+    "modules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/module" },
+      "description": "Knowledge modules, ranked by relevance per session. This is the engine's primary output; evaluation groups are a display-oriented summary derived from the same answers, not from this list. Modules and their ids are internal — never shown to the quiz taker (see resultPage)."
+    },
+    "module_settings": { "$ref": "#/$defs/moduleSettings" },
+    "emails": { "$ref": "#/$defs/emails" }
+  },
+  "$defs": {
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "axis"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "axis": { "type": "string", "enum": ["content", "readiness"] }
+      }
+    },
+    "answerOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "label_weights"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "label_weights": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "input_type", "required", "options"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "help_text": { "type": "string" },
+        "input_type": { "type": "string", "enum": ["single", "multi"] },
+        "required": { "type": "boolean" },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/answerOption" }
+        }
+      }
+    },
+    "numericExpression": {
+      "description": "An expression that evaluates to a number.",
+      "oneOf": [
+        { "$ref": "#/$defs/labelSumExpression" },
+        { "$ref": "#/$defs/constantExpression" }
+      ]
+    },
+    "labelSumExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label"],
+      "properties": {
+        "type": { "const": "label_sum" },
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "constantExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "constant" },
+        "value": { "type": "number" }
+      }
+    },
+    "answerSelectedExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "question", "option"],
+      "properties": {
+        "type": { "const": "answer_selected" },
+        "question": { "type": "string", "minLength": 1 },
+        "option": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moduleRelevantExpression": {
+      "description": "True iff the given module counts as relevant for this session (its relevance_rule matched and relevance_score is above its threshold). The mechanism by which evaluation groups are derived from the module ranking, rather than re-deriving their own independent classification.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "module"],
+      "properties": {
+        "type": { "const": "module_relevant" },
+        "module": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moduleTopRankExpression": {
+      "description": "True iff the given module is relevant for this session (see module_relevant) and its rank among relevant modules (1-based, ties broken by declared order in modules[]) is within the given count.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "module", "within"],
+      "properties": {
+        "type": { "const": "module_top_rank" },
+        "module": { "type": "string", "minLength": 1 },
+        "within": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "comparisonExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operator", "left", "right"],
+      "properties": {
+        "type": { "const": "comparison" },
+        "operator": { "type": "string", "enum": ["eq", "ne", "lt", "lte", "gt", "gte"] },
+        "left": { "$ref": "#/$defs/numericExpression" },
+        "right": { "$ref": "#/$defs/numericExpression" }
+      }
+    },
+    "andExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operands"],
+      "properties": {
+        "type": { "const": "and" },
+        "operands": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/ruleExpression" }
+        }
+      }
+    },
+    "orExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operands"],
+      "properties": {
+        "type": { "const": "or" },
+        "operands": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/ruleExpression" }
+        }
+      }
+    },
+    "notExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operand"],
+      "properties": {
+        "type": { "const": "not" },
+        "operand": { "$ref": "#/$defs/ruleExpression" }
+      }
+    },
+    "ruleExpression": {
+      "description": "A closed, evaluable boolean expression tree. No arbitrary code execution — every node type is one of a fixed, known set.",
+      "oneOf": [
+        { "$ref": "#/$defs/comparisonExpression" },
+        { "$ref": "#/$defs/answerSelectedExpression" },
+        { "$ref": "#/$defs/moduleRelevantExpression" },
+        { "$ref": "#/$defs/moduleTopRankExpression" },
+        { "$ref": "#/$defs/andExpression" },
+        { "$ref": "#/$defs/orExpression" },
+        { "$ref": "#/$defs/notExpression" }
+      ]
+    },
+    "resultSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "body"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "resultPage": {
+      "description": "Content shown to the quiz taker. Must never mention modules, module ids/names, package composition, or price — those are reserved for the consultation call. The section-5 validator checks result page text for accidental module id references.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "summary", "sections", "video_url", "cta"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/resultSection" }
+        },
+        "video_url": { "type": "string", "minLength": 1 },
+        "cta": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["email_capture", "consultation_offer_emphasis"],
+          "properties": {
+            "email_capture": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["headline", "body"],
+              "properties": {
+                "headline": { "type": "string", "minLength": 1 },
+                "body": { "type": "string", "minLength": 1 }
+              }
+            },
+            "consultation_offer_emphasis": {
+              "type": "string",
+              "enum": ["featured", "subdued", "hidden"]
+            }
+          }
+        }
+      }
+    },
+    "evaluationGroup": {
+      "description": "A display-oriented summary category, derived from the module ranking (see $defs/module and moduleRelevantExpression/moduleTopRankExpression). rule should normally be built from those two node types rather than re-deriving an independent classification straight from label sums — modules are the unit of content, groups are the unit of display.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "rule",
+        "priority",
+        "is_fallback",
+        "allow_multiple",
+        "result_page"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "rule": {
+          "description": "Null only for the fallback group, which matches when nothing else does.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/ruleExpression" }
+          ]
+        },
+        "priority": { "type": "integer" },
+        "is_fallback": { "type": "boolean" },
+        "allow_multiple": { "type": "boolean" },
+        "max_classifications": { "type": "integer", "minimum": 1 },
+        "result_page": { "$ref": "#/$defs/resultPage" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "is_fallback": { "const": true } },
+            "required": ["is_fallback"]
+          },
+          "then": {
+            "properties": { "rule": { "const": null } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "is_fallback": { "const": false } },
+            "required": ["is_fallback"]
+          },
+          "then": {
+            "properties": { "rule": { "$ref": "#/$defs/ruleExpression" } }
+          }
+        }
+      ]
+    },
+    "module": {
+      "description": "A knowledge-content unit, ranked by relevance per session. Internal only: id and name are never shown to the quiz taker.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "relevance_rule", "relevance_score", "threshold", "email_content_ref"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "relevance_rule": {
+          "description": "Boolean gate: the same closed rule-expression tree as evaluation_groups[].rule.",
+          "$ref": "#/$defs/ruleExpression"
+        },
+        "relevance_score": {
+          "type": "number",
+          "description": "Weight assigned to this module when relevance_rule matches, used to rank modules against each other. A fixed, author-set number — not computed from the answers — since raw label-sum magnitudes aren't comparable across modules built on different label axes."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "A module only counts as relevant when its relevance_score is above this. Lets content owners keep a module configured (rule intact) but excluded from ranking, e.g. while its content is still in draft."
+        },
+        "email_content_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moduleSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_recommended_modules"],
+      "properties": {
+        "max_recommended_modules": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many modules may feed into the email sequence for one session. Ties in relevance_score are broken deterministically by each module's position in the modules array — never randomly."
+        }
+      }
+    },
+    "emailStepFixed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "delay_hours", "subject", "body"],
+      "properties": {
+        "kind": { "const": "fixed" },
+        "delay_hours": { "type": "integer", "minimum": 0 },
+        "subject": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "emailStepModuleDriven": {
+      "description": "Sends the email content of the Nth-ranked relevant module for this session (1-based). If the session has fewer relevant modules than module_rank, this step is skipped entirely — never sent empty or as filler.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "delay_hours", "module_rank"],
+      "properties": {
+        "kind": { "const": "module_driven" },
+        "delay_hours": { "type": "integer", "minimum": 0 },
+        "module_rank": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "emailStepSharedBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "delay_hours", "block_ref"],
+      "properties": {
+        "kind": { "const": "shared_block" },
+        "delay_hours": { "type": "integer", "minimum": 0 },
+        "block_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "emailStep": {
+      "oneOf": [
+        { "$ref": "#/$defs/emailStepFixed" },
+        { "$ref": "#/$defs/emailStepModuleDriven" },
+        { "$ref": "#/$defs/emailStepSharedBlock" }
+      ]
+    },
+    "emailSequence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "steps"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "applies_to_groups": {
+          "description": "Evaluation group ids this sequence runs for. Omitted on the default sequence.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/emailStep" }
+        }
+      }
+    },
+    "sharedEmailBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subject", "body"],
+      "properties": {
+        "subject": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "emails": {
+      "description": "The readiness axis may only affect CTA emphasis (see resultPage.cta) and, optionally, how densely a sequence's steps are scheduled — never which content a step sends.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequences", "default_sequence", "shared_blocks"],
+      "properties": {
+        "sequences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/emailSequence" }
+        },
+        "default_sequence": {
+          "description": "Runs for any evaluation group not covered by sequences[].applies_to_groups.",
+          "$ref": "#/$defs/emailSequence"
+        },
+        "shared_blocks": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/sharedEmailBlock" }
+        }
+      }
+    }
+  }
+}

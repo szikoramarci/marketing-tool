@@ -1,0 +1,281 @@
+{
+  "version_id": "quiz-config-2026-09-13-v1",
+  "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "created_at": "2026-09-13T10:00:00+00:00",
+  "created_by": "admin@example.com",
+  "status": "draft",
+  "locale": "hu",
+  "experiment_compatible_with_previous": false,
+  "generation_trace": null,
+  "labels": [
+    { "id": "content_a", "name": "Stressz-kezelés", "axis": "content" },
+    { "id": "content_b", "name": "Kapcsolati minták", "axis": "content" },
+    { "id": "readiness_low", "name": "Alacsony készenlét", "axis": "readiness" },
+    { "id": "readiness_high", "name": "Magas készenlét", "axis": "readiness" }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Mi foglalkoztat most a leginkább?",
+      "help_text": "Válaszd azt, amelyik most a legjellemzőbb rád.",
+      "input_type": "single",
+      "required": true,
+      "options": [
+        {
+          "id": "q1_o1",
+          "text": "Folyamatosan feszült vagyok, nehezen kapcsolok ki.",
+          "label_weights": { "content_a": 3, "readiness_low": 1 }
+        },
+        {
+          "id": "q1_o2",
+          "text": "A kapcsolataimban ismétlődő mintákat látok.",
+          "label_weights": { "content_b": 3, "readiness_low": 1 }
+        },
+        {
+          "id": "q1_o3",
+          "text": "Mindkettő, és készen állok tenni ellene.",
+          "label_weights": { "content_a": 2, "content_b": 2, "readiness_high": 2 }
+        }
+      ]
+    },
+    {
+      "id": "q2",
+      "text": "Mióta tart ez az érzés?",
+      "input_type": "single",
+      "required": true,
+      "options": [
+        {
+          "id": "q2_o1",
+          "text": "Néhány hete.",
+          "label_weights": { "readiness_low": 1 }
+        },
+        {
+          "id": "q2_o2",
+          "text": "Több hónapja.",
+          "label_weights": { "readiness_low": 2 }
+        },
+        {
+          "id": "q2_o3",
+          "text": "Több mint egy éve, és elegem van belőle.",
+          "label_weights": { "readiness_high": 3 }
+        }
+      ]
+    },
+    {
+      "id": "q3",
+      "text": "Próbáltál már ez ügyben tenni valamit?",
+      "input_type": "single",
+      "required": true,
+      "options": [
+        {
+          "id": "q3_o1",
+          "text": "Még nem, csak most kezdek gondolkodni rajta.",
+          "label_weights": { "readiness_low": 2 }
+        },
+        {
+          "id": "q3_o2",
+          "text": "Igen, olvastam róla, néztem videókat.",
+          "label_weights": { "readiness_low": 1, "readiness_high": 1 }
+        },
+        {
+          "id": "q3_o3",
+          "text": "Igen, és keresek valakit, akivel dolgozhatnék rajta.",
+          "label_weights": { "readiness_high": 3 }
+        }
+      ]
+    },
+    {
+      "id": "q4",
+      "text": "Melyik állítás igaz rád? (több is jelölhető)",
+      "input_type": "multi",
+      "required": true,
+      "options": [
+        {
+          "id": "q4_o1",
+          "text": "Nehezen mondok nemet másoknak.",
+          "label_weights": { "content_b": 2 }
+        },
+        {
+          "id": "q4_o2",
+          "text": "Munkahelyi stressz nyomaszt.",
+          "label_weights": { "content_a": 2 }
+        },
+        {
+          "id": "q4_o3",
+          "text": "Szeretnék proaktívan változtatni.",
+          "label_weights": { "readiness_high": 1 }
+        }
+      ]
+    }
+  ],
+  "evaluation_groups": [
+    {
+      "id": "group_stress",
+      "name": "Stressz-kezelés domináns",
+      "priority": 1,
+      "is_fallback": false,
+      "allow_multiple": false,
+      "rule": {
+        "type": "module_top_rank",
+        "module": "module_stress_basics",
+        "within": 1
+      },
+      "result_page": {
+        "title": "A stresszkezelés az, ahol most a legtöbbet nyerhetsz",
+        "summary": "A válaszaid alapján most a feszültség és a folyamatos terhelés az, ami a leginkább nyomaszt.",
+        "sections": [
+          {
+            "title": "Mit jelent ez?",
+            "body": "A tartós stressz hosszú távon kihat a döntéseidre és a kapcsolataidra is."
+          }
+        ],
+        "video_url": "https://videos.example.com/segments/group-stress.mp4",
+        "cta": {
+          "email_capture": {
+            "headline": "Kérd el a részletes kiértékelést emailben",
+            "body": "Küldünk egy bővebb összefoglalót és néhány gyakorlati lépést."
+          },
+          "consultation_offer_emphasis": "subdued"
+        }
+      }
+    },
+    {
+      "id": "group_relationships",
+      "name": "Kapcsolati minták domináns",
+      "priority": 2,
+      "is_fallback": false,
+      "allow_multiple": false,
+      "rule": {
+        "type": "module_top_rank",
+        "module": "module_boundaries",
+        "within": 1
+      },
+      "result_page": {
+        "title": "A kapcsolati mintáid állnak most a középpontban",
+        "summary": "A válaszaid ismétlődő kapcsolati mintákra utalnak, amikre érdemes ránézni.",
+        "sections": [
+          {
+            "title": "Mit jelent ez?",
+            "body": "Ezek a minták gyakran gyerekkori tapasztalatokból erednek, és tudatosan alakíthatók."
+          }
+        ],
+        "video_url": "https://videos.example.com/segments/group-relationships.mp4",
+        "cta": {
+          "email_capture": {
+            "headline": "Kérd el a részletes kiértékelést emailben",
+            "body": "Küldünk egy bővebb összefoglalót és néhány gyakorlati lépést."
+          },
+          "consultation_offer_emphasis": "featured"
+        }
+      }
+    },
+    {
+      "id": "group_fallback",
+      "name": "Általános eredmény",
+      "priority": 99,
+      "is_fallback": true,
+      "allow_multiple": false,
+      "rule": null,
+      "result_page": {
+        "title": "Vegyes kép rajzolódik ki a válaszaidból",
+        "summary": "Több terület is érintett nálad; érdemes egy rövid beszélgetésben tisztázni, hol érdemes kezdeni.",
+        "sections": [
+          {
+            "title": "Mit jelent ez?",
+            "body": "Nem egy dolog húzza a legtöbbet, hanem több apróbb tényező együtt."
+          }
+        ],
+        "video_url": "https://videos.example.com/segments/group-fallback.mp4",
+        "cta": {
+          "email_capture": {
+            "headline": "Kérd el a részletes kiértékelést emailben",
+            "body": "Küldünk egy bővebb összefoglalót és néhány gyakorlati lépést."
+          },
+          "consultation_offer_emphasis": "hidden"
+        }
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "module_stress_basics",
+      "name": "Stresszkezelés alapok",
+      "relevance_rule": {
+        "type": "comparison",
+        "operator": "gte",
+        "left": { "type": "label_sum", "label": "content_a" },
+        "right": { "type": "constant", "value": 3 }
+      },
+      "relevance_score": 8,
+      "threshold": 5,
+      "email_content_ref": "module_stress_basics_email"
+    },
+    {
+      "id": "module_boundaries",
+      "name": "Határok kijelölése kapcsolatokban",
+      "relevance_rule": {
+        "type": "comparison",
+        "operator": "gte",
+        "left": { "type": "label_sum", "label": "content_b" },
+        "right": { "type": "constant", "value": 3 }
+      },
+      "relevance_score": 7,
+      "threshold": 5,
+      "email_content_ref": "module_boundaries_email"
+    },
+    {
+      "id": "module_first_step",
+      "name": "Az első lépés, ha készen állsz",
+      "relevance_rule": {
+        "type": "comparison",
+        "operator": "gte",
+        "left": { "type": "label_sum", "label": "readiness_high" },
+        "right": { "type": "constant", "value": 3 }
+      },
+      "relevance_score": 6,
+      "threshold": 5,
+      "email_content_ref": "module_first_step_email"
+    }
+  ],
+  "module_settings": {
+    "max_recommended_modules": 3
+  },
+  "emails": {
+    "sequences": [
+      {
+        "id": "seq_group_stress",
+        "applies_to_groups": ["group_stress"],
+        "steps": [
+          {
+            "kind": "fixed",
+            "delay_hours": 0,
+            "subject": "A kvíz eredményed részletesen",
+            "body": "Szia! Mellékelten küldjük a részletes kiértékelésedet a válaszaid alapján, a stresszkezelésre fókuszálva."
+          },
+          { "kind": "module_driven", "delay_hours": 24, "module_rank": 1 },
+          { "kind": "module_driven", "delay_hours": 72, "module_rank": 2 },
+          { "kind": "shared_block", "delay_hours": 168, "block_ref": "closing_offer" }
+        ]
+      }
+    ],
+    "default_sequence": {
+      "id": "seq_default",
+      "steps": [
+        {
+          "kind": "fixed",
+          "delay_hours": 0,
+          "subject": "A kvíz eredményed részletesen",
+          "body": "Szia! Mellékelten küldjük a részletes kiértékelésedet a válaszaid alapján."
+        },
+        { "kind": "module_driven", "delay_hours": 72, "module_rank": 1 },
+        { "kind": "shared_block", "delay_hours": 168, "block_ref": "closing_offer" }
+      ]
+    },
+    "shared_blocks": {
+      "closing_offer": {
+        "subject": "Szeretnél beszélgetni róla?",
+        "body": "Ha szívesen átbeszélnéd a helyzeted, foglalj egy ingyenes konzultációt."
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@
         "filament/filament": "^5.8",
         "laravel/framework": "^13.17",
         "laravel/tinker": "^3.0",
+        "opis/json-schema": "^2.6",
         "spatie/laravel-model-states": "^2.14",
         "spatie/laravel-webhook-client": "^3.7"
     },
