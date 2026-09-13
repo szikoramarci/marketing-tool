@@ -276,6 +276,20 @@
         "subject": "Szeretnél beszélgetni róla?",
         "body": "Ha szívesen átbeszélnéd a helyzeted, foglalj egy ingyenes konzultációt."
       }
+    },
+    "module_content": {
+      "module_stress_basics_email": {
+        "subject": "Három dolog, ami azonnal csökkenti a stresszt",
+        "body": "Küldünk három egyszerű, kipróbált technikát, amit még ma elkezdhetsz."
+      },
+      "module_boundaries_email": {
+        "subject": "Hogyan mondj nemet anélkül, hogy rosszul éreznéd magad",
+        "body": "A határok kijelölése tanulható készség — mutatunk egy konkrét gyakorlatot."
+      },
+      "module_first_step_email": {
+        "subject": "Mi az első lépés, ha készen állsz a változásra?",
+        "body": "Nem kell mindent egyszerre megoldani — csak egy jó első lépés kell."
+      }
     }
   }
 }

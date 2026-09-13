@@ -499,7 +499,7 @@
       "description": "The readiness axis may only affect CTA emphasis (see resultPage.cta) and, optionally, how densely a sequence's steps are scheduled — never which content a step sends.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["sequences", "default_sequence", "shared_blocks"],
+      "required": ["sequences", "default_sequence", "shared_blocks", "module_content"],
       "properties": {
         "sequences": {
           "type": "array",
@@ -510,6 +510,12 @@
           "$ref": "#/$defs/emailSequence"
         },
         "shared_blocks": {
+          "type": "object",
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/sharedEmailBlock" }
+        },
+        "module_content": {
+          "description": "Email content for module_driven steps, keyed by modules[].email_content_ref.",
           "type": "object",
           "propertyNames": { "type": "string", "minLength": 1 },
           "additionalProperties": { "$ref": "#/$defs/sharedEmailBlock" }
