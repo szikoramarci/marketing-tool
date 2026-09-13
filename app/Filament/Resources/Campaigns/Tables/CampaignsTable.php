@@ -3,8 +3,6 @@
 namespace App\Filament\Resources\Campaigns\Tables;
 
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -37,11 +35,9 @@ class CampaignsTable
                     ->url(fn ($record) => route('quiz.start', $record))
                     ->openUrlInNewTab(),
                 EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
             ]);
+        // No delete: a campaign cascades to its config versions, sessions, and events —
+        // destructive enough that it shouldn't be a casual table action. If a campaign
+        // genuinely needs retiring, pause/archive its config versions instead.
     }
 }

@@ -3,17 +3,12 @@
 namespace App\Filament\Resources\Campaigns\Pages;
 
 use App\Filament\Resources\Campaigns\CampaignResource;
-use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
 class EditCampaign extends EditRecord
 {
     protected static string $resource = CampaignResource::class;
 
-    protected function getHeaderActions(): array
-    {
-        return [
-            DeleteAction::make(),
-        ];
-    }
+    // No delete action: a campaign cascades to its config versions, sessions, and
+    // events — too destructive for a casual admin action.
 }

@@ -5,7 +5,7 @@
         x-data="{
             step: 0,
             last: {{ count($config->questions) - 1 }},
-            questionIds: @json(array_column($config->questions, 'id')),
+            questionIds: {{ Illuminate\Support\Js::from(array_column($config->questions, 'id')) }},
             pingShown() {
                 fetch('{{ route('quiz.question-shown', $quizSession) }}', {
                     method: 'POST',
