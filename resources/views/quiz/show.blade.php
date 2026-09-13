@@ -2,7 +2,23 @@
     <form
         method="POST"
         action="{{ route('quiz.submit', $quizSession) }}"
-        x-data="{ step: 0, last: {{ count($config->questions) - 1 }} }"
+        x-data="{
+            step: 0,
+            last: {{ count($config->questions) - 1 }},
+            questionIds: @json(array_column($config->questions, 'id')),
+            pingShown() {
+                fetch('{{ route('quiz.question-shown', $quizSession) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                    },
+                    body: JSON.stringify({ question_id: this.questionIds[this.step] }),
+                    keepalive: true,
+                });
+            },
+        }"
+        x-init="pingShown(); $watch('step', () => pingShown())"
         class="space-y-8"
     >
         @csrf

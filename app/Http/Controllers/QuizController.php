@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Campaign;
 use App\Models\ConfigVersion;
 use App\Models\QuizSession;
+use App\QuizConfig\Analytics\EventRecorder;
+use App\QuizConfig\Analytics\FunnelQueries;
+use App\QuizConfig\Analytics\QuizEventType;
 use App\QuizConfig\AnswerSubmissionValidator;
 use App\QuizConfig\Engine\AnswerVector;
 use App\QuizConfig\Engine\EvaluationEngine;
@@ -12,11 +15,12 @@ use App\QuizConfig\VariantSelector;
 use App\QuizConfig\VisitorToken;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 class QuizController extends Controller
 {
-    public function start(Request $request, Campaign $campaign, VariantSelector $selector): RedirectResponse
+    public function start(Request $request, Campaign $campaign, VariantSelector $selector, EventRecorder $recorder): RedirectResponse
     {
         $visitorToken = VisitorToken::resolve($request);
         $configVersion = $selector->select($campaign, $visitorToken);
@@ -29,6 +33,8 @@ class QuizController extends Controller
             'is_preview' => false,
             'started_at' => now(),
         ]);
+
+        $recorder->record($quizSession, QuizEventType::SessionStarted);
 
         return redirect()->route('quiz.show', $quizSession);
     }
@@ -57,11 +63,29 @@ class QuizController extends Controller
         ]);
     }
 
+    public function questionShown(Request $request, QuizSession $quizSession, EventRecorder $recorder): Response
+    {
+        $questionId = (string) $request->input('question_id');
+        $questionIds = array_column($quizSession->configVersion->toConfigObject()->questions, 'id');
+        $position = array_search($questionId, $questionIds, true);
+
+        if ($position !== false) {
+            $recorder->record($quizSession, QuizEventType::QuestionShown, [
+                'question_id' => $questionId,
+                'position' => $position,
+                'normalized_position' => FunnelQueries::normalizedPosition($position, count($questionIds)),
+            ]);
+        }
+
+        return response()->noContent();
+    }
+
     public function submit(
         Request $request,
         QuizSession $quizSession,
         AnswerSubmissionValidator $validator,
         EvaluationEngine $engine,
+        EventRecorder $recorder,
     ): RedirectResponse {
         if ($quizSession->completed_at !== null) {
             return redirect()->route('results.show', $quizSession);
@@ -72,13 +96,24 @@ class QuizController extends Controller
 
         $result = $engine->evaluate($config, new AnswerVector($cleanedAnswers));
 
+        foreach ($cleanedAnswers as $questionId => $answer) {
+            $recorder->record($quizSession, QuizEventType::QuestionAnswered, [
+                'question_id' => $questionId,
+                'answer' => $answer,
+            ]);
+        }
+
+        $recorder->record($quizSession, QuizEventType::EvaluationCompleted, [
+            'matched_group_ids' => $result->matchedGroupIds,
+        ]);
+
         $quizSession->answers = $cleanedAnswers;
         $quizSession->markCompleted($result);
 
         return redirect()->route('results.show', $quizSession);
     }
 
-    public function result(QuizSession $quizSession): View
+    public function result(QuizSession $quizSession, EventRecorder $recorder): View
     {
         abort_if($quizSession->completed_at === null, 404);
 
@@ -87,6 +122,10 @@ class QuizController extends Controller
             ->firstWhere('id', $groupId);
 
         abort_if($group === null, 404);
+
+        $recorder->record($quizSession, QuizEventType::ResultPageViewed, [
+            'group_id' => $group['id'],
+        ]);
 
         return view('quiz.result', [
             'quizSession' => $quizSession,
