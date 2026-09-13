@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ConfigVersions;
 use App\Filament\Resources\ConfigVersions\Pages\CreateConfigVersion;
 use App\Filament\Resources\ConfigVersions\Pages\EditConfigVersion;
 use App\Filament\Resources\ConfigVersions\Pages\ListConfigVersions;
+use App\Filament\Resources\ConfigVersions\Pages\PreviewEmails;
 use App\Filament\Resources\ConfigVersions\Schemas\ConfigVersionForm;
 use App\Filament\Resources\ConfigVersions\Tables\ConfigVersionsTable;
 use App\Models\ConfigVersion;
@@ -43,6 +44,7 @@ class ConfigVersionResource extends Resource
             'index' => ListConfigVersions::route('/'),
             'create' => CreateConfigVersion::route('/create'),
             'edit' => EditConfigVersion::route('/{record}/edit'),
+            'preview-emails' => PreviewEmails::route('/{record}/preview-emails'),
         ];
     }
 }

@@ -75,7 +75,25 @@ class AnthropicFeedbackGenerator implements FeedbackGenerator
             "generation_trace" mezőt töltsd ki a kapott forrás-hivatkozással, utasítással és
             a modell nevével.
 
-            A kvíz nyelve magyar (locale: "hu"). A séma:
+            NYELVI KÖVETELMÉNY — ez kritikus: "locale" mindig "hu", ÉS minden, a kitöltő
+            vagy a lead számára valaha látható/olvasható szöveg is legyen magyar nyelvű.
+            Ide tartozik: minden kérdés "text" és "help_text" mezője; minden válaszopció
+            "text" mezője; minden eredményoldal "title", "summary", a "sections" tömb
+            "title"/"body" párjai, és a "cta.email_capture" "headline"/"body" mezői; minden
+            email "subject" és "body"/"content" mezője (fix lépések, "shared_blocks",
+            "module_content"). A "labels"/"evaluation_groups"/"modules" "name" mezői belső
+            adminisztrátori címkék (a kitöltő sosem látja őket), ezeket is írd magyarul,
+            hacsak az utasítás mást nem kér.
+
+            Amit VÁLTOZATLANUL, angolul kell hagyni: minden mező- és kulcsnév (pl. "text",
+            "input_type"), minden stabil azonosító ("id" értékek, pl. "q1", "q1_o1",
+            "label_a", "group_fallback", "module_a"), és minden zárt enum-érték a séma
+            szerint (pl. "input_type": "single"|"multi", "axis": "content"|"readiness",
+            "kind": "fixed"|"module_driven"|"shared_block", "operator": "gte" stb.,
+            "consultation_offer_emphasis": "featured"|"subdued"|"hidden") — ezeket SOHA ne
+            fordítsd le, pontosan a séma által megengedett formában szerepeljenek.
+
+            A séma:
 
             {$schema}
             PROMPT;

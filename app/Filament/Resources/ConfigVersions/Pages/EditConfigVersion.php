@@ -136,6 +136,10 @@ class EditConfigVersion extends EditRecord
                 ->color('gray')
                 ->url(fn () => route('quiz.preview', $this->getRecord()))
                 ->openUrlInNewTab(),
+            Action::make('previewEmails')
+                ->label('Emailek előnézete')
+                ->color('gray')
+                ->url(fn () => ConfigVersionResource::getUrl('preview-emails', ['record' => $this->getRecord()])),
             Action::make('duplicate')
                 ->label('Másolat új piszkozatként')
                 ->color('gray')
