@@ -59,6 +59,63 @@ class ConfigVersion extends Model
             throw new InvalidArgumentException('New config versions must be created with status "draft".');
         }
 
+        $content = self::validatedContentFromDocument($document);
+
+        $configVersion = new self([
+            'status' => 'draft',
+            'content' => $content,
+            'content_hash' => ContentHash::compute($content),
+            'created_by' => $createdBy,
+        ]);
+
+        $configVersion->campaign()->associate($campaign);
+        $configVersion->save();
+
+        return $configVersion;
+    }
+
+    /**
+     * Only a draft's content may be edited in place — "a publikált verzió tartalma soha
+     * nem módosul" applies from the moment a version first leaves draft. Use
+     * cloneAsNewDraft() to change a published version's content.
+     */
+    public function updateDraftDocument(object $document): void
+    {
+        if ($this->status->getMorphClass() !== 'draft') {
+            throw new InvalidArgumentException('Only draft config versions can have their content edited in place.');
+        }
+
+        $content = self::validatedContentFromDocument($document);
+
+        $this->content = $content;
+        $this->content_hash = ContentHash::compute($content);
+        $this->save();
+    }
+
+    /**
+     * The only way to change a non-draft version's content: a fresh draft row carrying the
+     * same content, free to be edited from there.
+     */
+    public function cloneAsNewDraft(string $createdBy): self
+    {
+        $clone = new self([
+            'campaign_id' => $this->campaign_id,
+            'status' => 'draft',
+            'content' => $this->content,
+            'content_hash' => $this->content_hash,
+            'created_by' => $createdBy,
+        ]);
+
+        $clone->save();
+
+        return $clone;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function validatedContentFromDocument(object $document): array
+    {
         $validation = (new ConfigSchemaValidator)->validate($document);
 
         if (! $validation->valid) {
@@ -76,17 +133,7 @@ class ConfigVersion extends Model
             $content['status'],
         );
 
-        $configVersion = new self([
-            'status' => 'draft',
-            'content' => $content,
-            'content_hash' => ContentHash::compute($content),
-            'created_by' => $createdBy,
-        ]);
-
-        $configVersion->campaign()->associate($campaign);
-        $configVersion->save();
-
-        return $configVersion;
+        return $content;
     }
 
     /**
