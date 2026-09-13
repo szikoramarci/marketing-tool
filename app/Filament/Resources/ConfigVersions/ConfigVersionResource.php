@@ -19,6 +19,10 @@ class ConfigVersionResource extends Resource
 {
     protected static ?string $model = ConfigVersion::class;
 
+    protected static ?string $modelLabel = 'konfigverzió';
+
+    protected static ?string $pluralModelLabel = 'konfigverziók';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema

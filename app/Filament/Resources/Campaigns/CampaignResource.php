@@ -19,6 +19,10 @@ class CampaignResource extends Resource
 {
     protected static ?string $model = Campaign::class;
 
+    protected static ?string $modelLabel = 'kampány';
+
+    protected static ?string $pluralModelLabel = 'kampányok';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
