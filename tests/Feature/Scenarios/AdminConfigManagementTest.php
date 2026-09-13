@@ -1,6 +1,8 @@
 <?php
 
 use App\Filament\Resources\Campaigns\Pages\CreateCampaign;
+use App\Filament\Resources\Campaigns\Pages\EditCampaign;
+use App\Filament\Resources\Campaigns\RelationManagers\ConfigVersionsRelationManager;
 use App\Filament\Resources\ConfigVersions\Pages\CreateConfigVersion;
 use App\Filament\Resources\ConfigVersions\Pages\EditConfigVersion;
 use App\Models\Campaign;
@@ -90,4 +92,61 @@ it('disables editing content once a version leaves draft, but duplication create
     $duplicate = ConfigVersion::where('id', '!=', $configVersion->id)->sole();
     expect($duplicate->status->getMorphClass())->toBe('draft')
         ->and($duplicate->content)->toBe($configVersion->content);
+});
+
+it('shows the content field as editable JSON text (not a raw array) from the campaign relation manager', function () {
+    $campaign = Campaign::factory()->create();
+    $configVersion = ConfigVersion::factory()->create(['campaign_id' => $campaign->id]);
+
+    Livewire::test(ConfigVersionsRelationManager::class, [
+        'ownerRecord' => $campaign,
+        'pageClass' => EditCampaign::class,
+    ])
+        ->mountTableAction('edit', $configVersion)
+        ->assertTableActionDataSet(function (array $state) use ($configVersion) {
+            expect($state['content'])->toBeString();
+
+            $document = json_decode($state['content']);
+            expect($document)->not->toBeNull()
+                ->and($document->version_id)->toBe($configVersion->id);
+
+            return [];
+        });
+});
+
+it('saves edits made through the campaign relation manager using the real update path', function () {
+    $campaign = Campaign::factory()->create();
+    $configVersion = ConfigVersion::factory()->create(['campaign_id' => $campaign->id]);
+
+    $document = QuizConfigFixture::example();
+    $document['status'] = 'draft';
+
+    Livewire::test(ConfigVersionsRelationManager::class, [
+        'ownerRecord' => $campaign,
+        'pageClass' => EditCampaign::class,
+    ])
+        ->callTableAction('edit', $configVersion, data: [
+            'content' => json_encode($document),
+        ])
+        ->assertHasNoTableActionErrors();
+
+    $configVersion->refresh();
+    expect($configVersion->content)->not->toHaveKeys(['status', 'created_by', 'created_at', 'version_id', 'content_hash']);
+});
+
+it('shows a table action error instead of corrupting data when relation-manager JSON is invalid', function () {
+    $campaign = Campaign::factory()->create();
+    $configVersion = ConfigVersion::factory()->create(['campaign_id' => $campaign->id]);
+    $originalContent = $configVersion->content;
+
+    Livewire::test(ConfigVersionsRelationManager::class, [
+        'ownerRecord' => $campaign,
+        'pageClass' => EditCampaign::class,
+    ])
+        ->callTableAction('edit', $configVersion, data: [
+            'content' => '{"not": "a valid config"}',
+        ])
+        ->assertHasTableActionErrors(['content']);
+
+    expect($configVersion->fresh()->content)->toBe($originalContent);
 });

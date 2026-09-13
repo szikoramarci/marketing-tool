@@ -27,12 +27,7 @@ class EditConfigVersion extends EditRecord
      */
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['content'] = json_encode(
-            $this->getRecord()->toConfigObject(),
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
-        );
-
-        return $data;
+        return ConfigVersionResource::mutateFormDataBeforeFill($this->getRecord(), $data);
     }
 
     /**
@@ -40,30 +35,13 @@ class EditConfigVersion extends EditRecord
      */
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        if ($record->status->getMorphClass() === 'draft') {
-            $document = json_decode($data['content']);
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw ValidationException::withMessages([
-                    'data.content' => 'Érvénytelen JSON: '.json_last_error_msg(),
-                ]);
-            }
-
-            try {
-                $record->updateDraftDocument($document);
-            } catch (InvalidArgumentException $exception) {
-                throw ValidationException::withMessages([
-                    'data.content' => $exception->getMessage(),
-                ]);
-            }
+        try {
+            return ConfigVersionResource::saveFormData($record, $data);
+        } catch (InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'data.content' => $exception->getMessage(),
+            ]);
         }
-
-        if (array_key_exists('traffic_weight', $data)) {
-            $record->traffic_weight = $data['traffic_weight'];
-            $record->save();
-        }
-
-        return $record;
     }
 
     protected function getHeaderActions(): array
