@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'feedback_generator' => [
+        'driver' => env('FEEDBACK_GENERATOR_DRIVER', 'fake'),
+    ],
+
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5'),
+    ],
+
 ];
