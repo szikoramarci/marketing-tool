@@ -243,7 +243,7 @@
       }
     },
     "ruleExpression": {
-      "description": "A closed, evaluable boolean expression tree. No arbitrary code execution — every node type is one of a fixed, known set.",
+      "description": "The evaluation-group rule language: a closed, evaluable boolean expression tree. No arbitrary code execution — every node type is one of a fixed, known set. Includes module references (module_relevant/module_top_rank); see moduleRuleExpression for the narrower language modules themselves use.",
       "oneOf": [
         { "$ref": "#/$defs/comparisonExpression" },
         { "$ref": "#/$defs/answerSelectedExpression" },
@@ -253,6 +253,51 @@
         { "$ref": "#/$defs/orExpression" },
         { "$ref": "#/$defs/notExpression" }
       ]
+    },
+    "moduleRuleExpression": {
+      "description": "The module rule language: the same closed expression tree as ruleExpression, minus module_relevant/module_top_rank. Modules are the primitive that evaluation groups are derived from, so a module's own relevance_rule must not reference other modules — this keeps module evaluation acyclic and independent of group evaluation, with no need for runtime cycle detection.",
+      "oneOf": [
+        { "$ref": "#/$defs/comparisonExpression" },
+        { "$ref": "#/$defs/answerSelectedExpression" },
+        { "$ref": "#/$defs/moduleAndExpression" },
+        { "$ref": "#/$defs/moduleOrExpression" },
+        { "$ref": "#/$defs/moduleNotExpression" }
+      ]
+    },
+    "moduleAndExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operands"],
+      "properties": {
+        "type": { "const": "and" },
+        "operands": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/moduleRuleExpression" }
+        }
+      }
+    },
+    "moduleOrExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operands"],
+      "properties": {
+        "type": { "const": "or" },
+        "operands": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/moduleRuleExpression" }
+        }
+      }
+    },
+    "moduleNotExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "operand"],
+      "properties": {
+        "type": { "const": "not" },
+        "operand": { "$ref": "#/$defs/moduleRuleExpression" }
+      }
     },
     "resultSection": {
       "type": "object",
@@ -357,8 +402,8 @@
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
         "relevance_rule": {
-          "description": "Boolean gate: the same closed rule-expression tree as evaluation_groups[].rule.",
-          "$ref": "#/$defs/ruleExpression"
+          "description": "Boolean gate: the closed rule-expression tree over label aggregates and specific answers — see moduleRuleExpression.",
+          "$ref": "#/$defs/moduleRuleExpression"
         },
         "relevance_score": {
           "type": "number",
