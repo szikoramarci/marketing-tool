@@ -6,6 +6,7 @@ use App\Contracts\FeedbackGenerator;
 use App\Contracts\GenerationRequest;
 use App\Contracts\GenerationResult;
 use Illuminate\Support\Facades\Http;
+use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 
 class AnthropicFeedbackGenerator implements FeedbackGenerator
@@ -19,15 +20,23 @@ class AnthropicFeedbackGenerator implements FeedbackGenerator
             throw new RuntimeException('ANTHROPIC_API_KEY is not configured.');
         }
 
+        // Streamed: a full config document at max_tokens=16000 with adaptive thinking
+        // routinely runs past a couple of minutes, and a non-streamed request only
+        // receives its first byte once generation finishes — that reliably trips a
+        // fixed-duration client timeout (see incident: 120s timeout, 0 bytes received).
+        // Streaming both starts delivering bytes immediately and is what the Anthropic
+        // API itself requires once estimated generation time is long enough.
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
             'anthropic-version' => '2023-06-01',
             'content-type' => 'application/json',
         ])
-            ->timeout(120)
+            ->withOptions(['stream' => true])
+            ->timeout(300)
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => $model,
                 'max_tokens' => 16000,
+                'stream' => true,
                 'system' => $this->systemPrompt(),
                 'messages' => [
                     [
@@ -41,22 +50,66 @@ class AnthropicFeedbackGenerator implements FeedbackGenerator
             throw new RuntimeException("Anthropic API hiba ({$response->status()}): {$response->body()}");
         }
 
-        $body = $response->json();
+        [$text, $stopReason] = $this->consumeStream($response->toPsrResponse()->getBody());
 
-        if (($body['stop_reason'] ?? null) === 'refusal') {
+        if ($stopReason === 'refusal') {
             throw new RuntimeException('A modell elutasította a kérést.');
         }
 
-        $textBlock = collect($body['content'] ?? [])->firstWhere('type', 'text');
-
-        if ($textBlock === null) {
+        if ($text === '') {
             throw new RuntimeException('A válasz nem tartalmazott szöveges tartalmat.');
         }
 
         return new GenerationResult(
-            documentJson: trim($textBlock['text']),
+            documentJson: trim($text),
             model: $model,
         );
+    }
+
+    /**
+     * @return array{0: string, 1: ?string} the concatenated text and the final stop reason
+     */
+    private function consumeStream(StreamInterface $stream): array
+    {
+        $text = '';
+        $stopReason = null;
+        $buffer = '';
+
+        while (! $stream->eof()) {
+            $buffer .= $stream->read(8192);
+
+            while (($newlinePosition = strpos($buffer, "\n")) !== false) {
+                $line = substr($buffer, 0, $newlinePosition);
+                $buffer = substr($buffer, $newlinePosition + 1);
+
+                if (! str_starts_with($line, 'data: ')) {
+                    continue;
+                }
+
+                $event = json_decode(substr($line, strlen('data: ')), associative: true);
+
+                if (! is_array($event)) {
+                    continue;
+                }
+
+                if (($event['type'] ?? null) === 'error') {
+                    $message = $event['error']['message'] ?? 'ismeretlen hiba';
+
+                    throw new RuntimeException("Anthropic streaming hiba: {$message}");
+                }
+
+                if (($event['type'] ?? null) === 'content_block_delta'
+                    && ($event['delta']['type'] ?? null) === 'text_delta') {
+                    $text .= $event['delta']['text'];
+                }
+
+                if (($event['type'] ?? null) === 'message_delta' && isset($event['delta']['stop_reason'])) {
+                    $stopReason = $event['delta']['stop_reason'];
+                }
+            }
+        }
+
+        return [$text, $stopReason];
     }
 
     private function systemPrompt(): string

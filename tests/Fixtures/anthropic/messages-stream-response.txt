@@ -1,0 +1,17 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_01ExampleFixtureId","type":"message","role":"assistant","model":"claude-opus-5","content":[],"stop_reason":null,"usage":{"input_tokens":1500,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"{\"version_id\":\"generated\",\"content_hash\":\"pending\",\"created_at\":\"2026-09-13T10:00:00+00:00\",\"created_by\":\"anthropic\",\"status\":\"draft\",\"locale\":\"hu\",\"experiment_compatible_with_previous\":false,\"generation_trace\":{\"source_reference\":\"__SOURCE_REFERENCE__\",\"instructions\":\"__INSTRUCTIONS__\",\"model\":\"claude-opus-5\"},\"labels\":[{\"id\":\"label_a\",\"name\":\"Label A\",\"axis\":\"content\"}],\"questions\":[{\"id\":\"q1\",\"text\":\"Melyik igaz rád?\",\"input_type\":\"single\",\"required\":true,\"options\":[{\"id\":\"q1_o1\",\"text\":\"A\",\"label_weights\":{\"label_a\":1}},{\"id\":\"q1_o2\",\"text\":\"B\",\"label_weights\":{}}]}],\"evaluation_groups\":[{\"id\":\"group_fallback\",\"name\":\"Fallback\",\"priority\":1,\"is_fallback\":true,\"allow_multiple\":false,\"rule\":null,\"result_page\":{\"title\":\"Eredmény\",\"summary\":\"Összefoglaló.\",\"sections\":[],\"video_url\":\"https://videos.example.com/fallback.mp4\",\"cta\":{\"email_capture\":{\"headline\":\"Kérd el emailben\",\"body\":\"Küldünk egy összefoglalót.\"},\"consultation_offer_emphasis\":\"hidden\"}}}],\"modules\":[{\"id\":\"module_a\",\"name\":\"Module A\",\"relevance_rule\":{\"type\":\"comparison\",\"operator\":\"gte\",\"left\":{\"type\":\"label_sum\",\"label\":\"label_a\"},\"right\":{\"type\":\"constant\",\"value\":1}},\"relevance_score\":1,\"threshold\":0,\"email_content_ref\":\"module_a_email\"}],\"module_settings\":{\"max_recommended_modules\":1},\"emails\":{\"sequences\":[],\"default_sequence\":{\"id\":\"seq_default\",\"steps\":[{\"kind\":\"fixed\",\"delay_hours\":0,\"subject\":\"Eredmény\",\"body\":\"Az eredményed.\"}]},\"shared_blocks\":{},\"module_content\":{\"module_a_email\":{\"subject\":\"Modul tartalom\",\"body\":\"Részletek.\"}}}}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"__STOP_REASON__","stop_sequence":null},"usage":{"output_tokens":600}}
+
+event: message_stop
+data: {"type":"message_stop"}
