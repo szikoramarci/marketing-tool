@@ -1,14 +1,17 @@
 # Funnel rendszer – online konzultációs praxis
 
-Kampányalapú értékesítési rendszer egy 1:1 online konzultációs praxishoz. A látogató egy kampány kvízét tölti ki (4–5 kérdés), a válaszai alapján szegmensbe kerül, és személyre szabott visszajelzést, valamint a szegmenséhez tartozó videót kapja. Innen a bizalmi szintjéhez illő következő lépés jön: további tartalmak (nurture), csomagajánlat vagy ingyenes 30–60 perces első beszélgetés. A cél egy 4–5 alkalmas 1:1 kurzuscsomag megvásárlása, erőszakos sürgetés nélkül. A praxist vezető szakember nem technikai felhasználó: az admin felületen napi teendőlistát lát.
+Kampányalapú értékesítési rendszer egy 1:1 online konzultációs praxishoz. A látogató egy kampány kvízét tölti ki (4–5 kérdés), a válaszai alapján szegmensbe (a kódban: `evaluation_group`) kerül, és személyre szabott — de futásidőben teljesen szabályalapú, előre megírt — visszajelzést, valamint a szegmenséhez tartozó videót kapja. A cél egy 4–5 alkalmas 1:1 kurzuscsomag megvásárlása, erőszakos sürgetés nélkül. A praxist vezető szakember nem technikai felhasználó.
+
+Ez a dokumentum a **ténylegesen megépített** állapotot írja le. Amit még nem építettünk meg, azt a „Tervezett, még nincs kódban” szakasz sorolja fel: jó ötletek a korábbi tervezésből, amiket egyeztetés után érdemes megcsinálni — de ne kezeld meglévő viselkedésként, és ne dönts helyettünk arról, hogy pontosan hogyan épüljenek meg.
 
 ## Tech stack
 
-- Laravel (legfrissebb stabil), PHP 8.4, PostgreSQL
+- Laravel 13, PHP 8.4, PostgreSQL
 - Publikus felület: Blade + Tailwind CSS + Alpine.js, szerveroldali renderelés
-- Admin felület: Filament, `/admin` alatt
-- Állapotgép: `spatie/laravel-model-states`
-- Webhookok: `spatie/laravel-webhook-client`
+- Admin felület: Filament 5, `/admin` alatt
+- JSON séma validáció: `opis/json-schema` (a kvízkonfiguráció dokumentum-alakjának ellenőrzésére)
+- Állapotgép: `spatie/laravel-model-states` — jelenleg a `ConfigVersion` állapotára használjuk (ld. lent); Lead-re még nincs, mert Lead entitás egyáltalán nem létezik még
+- Webhookok: `spatie/laravel-webhook-client` — telepítve, `webhook_calls` tábla létezik, de még nincs hozzá kötve konkrét szolgáltató/kontraktus
 - Queue: `database` driver (Postgres), nincs Redis
 - Tesztek: Pest
 - Fejlesztői környezet: Laravel Sail (Docker) WSL2 alatt, Mailpit a levelekhez
@@ -19,13 +22,16 @@ Kampányalapú értékesítési rendszer egy 1:1 online konzultációs praxishoz
 Minden parancs a Sail konténerben fut. Mindig a teljes útvonalat használd (`./vendor/bin/sail`), mert a `sail` alias nem biztos, hogy létezik a shelledben.
 
 ```bash
-./vendor/bin/sail up -d                                # környezet indítása
-./vendor/bin/sail artisan migrate:fresh --seed         # adatbázis újraépítése demóadatokkal
-./vendor/bin/sail artisan test --parallel              # teljes tesztcsomag
-./vendor/bin/sail artisan test --filter=OfferFollowUp  # egy teszt vagy fájl
-./vendor/bin/sail pint --dirty                         # módosított fájlok formázása
-./vendor/bin/sail npm run dev                          # Vite dev szerver
-./vendor/bin/sail artisan funnel:process-deadlines     # határidők feldolgozása kézzel
+./vendor/bin/sail up -d                                            # környezet indítása
+./vendor/bin/sail artisan migrate:fresh --seed                     # adatbázis újraépítése (a seeder egyelőre csak admin usert hoz létre, ld. lent)
+./vendor/bin/sail artisan test --parallel                          # teljes tesztcsomag
+./vendor/bin/sail artisan test --filter=ConfigGenerationTest       # egy teszt vagy fájl
+./vendor/bin/sail pint --dirty                                     # módosított fájlok formázása
+./vendor/bin/sail npm run dev                                      # Vite dev szerver
+./vendor/bin/sail artisan quiz-config:validate {path}              # kvízkonfiguráció JSON validálása (séma + referenciák + elérhetőség + kiegyensúlyozottság)
+./vendor/bin/sail artisan quiz-config:evaluate {config} {answers}  # egy válaszvektor kiértékelése egy config-fájlon
+./vendor/bin/sail artisan quiz-events:report {campaign-slug}       # funnel / lemorzsolódás / csoport-eloszlás lekérdezések egy kampányra
+./vendor/bin/sail artisan quiz-events:export {campaign-slug}       # a kampány eseménynaplójának CSV-exportja
 ```
 
 Címek: alkalmazás http://localhost, admin http://localhost/admin, Mailpit http://localhost:8025
@@ -34,71 +40,61 @@ Címek: alkalmazás http://localhost, admin http://localhost/admin, Mailpit http
 
 Monolit, klasszikus MVC.
 
-- `routes/web.php`: publikus oldalak (landing, kvíz, eredmény, email-megadás, leiratkozás)
+- `routes/web.php`: publikus oldalak (kampányindítás slug alapján, kvíz, eredmény, admin-only preview)
 - `/admin`: Filament panel
-- `routes/api.php`: külső szolgáltatók webhookjai `/api/webhooks/{provider}` alatt
+- `routes/api.php`: jelenleg üres — a külső szolgáltatók webhookjai ide jönnek majd (ld. Tervezett szakasz)
 
 ### Domain
 
-- `Campaign`: központi entitás (téma, landing szövegek, kvíz, szegmensek, csomag, utánkövetési szabályok). Minden kampányonként konfigurálható, semmi nincs kódba égetve.
-- `Quiz`: verziózott. Publikált kvíz módosítása új verziót hoz létre; a kitöltések a verzióra hivatkoznak, hogy a régiek értelmezhetők maradjanak.
-- `Question`, `AnswerOption`: minden válaszopció szegmensenkénti pontszámot és egy előre megírt, rövid visszajelző mondatot tartalmaz. A kiértékelés determinisztikus: pontösszeg → szegmens.
-- `Segment`: visszajelző szöveg, videó, ajánlott csomag.
-- `Package`: ár, alkalmak száma és hossza, garancia. Több kampány is használhatja.
-- `QuizSubmission`: egy kitöltés válaszai és eredménye.
-- `Lead`: a kitöltő. Email nélkül is létrejön; ő az állapotgép tárgya.
-- `LeadEvent`: csak hozzáfűzhető eseménynapló (ki, mikor, miből mibe, milyen okból, metaadat). Ebből jön a funnel-statisztika.
-- `FollowUpRule`: kampányonkénti időszabály, pl. „`OfferSent` után 3 nap → email teendő, 7 nap → hívás teendő”.
-- `Task`: a szakember teendője (típus, esedékesség, lead, lezárás).
+- `Campaign`: központi entitás (`slug`, `name`); egy kampányhoz több `ConfigVersion` tartozik.
+- `ConfigVersion`: a kampány kvízének **egy teljes, verziózott JSON dokumentuma** — nincs külön `Quiz`/`Question`/`AnswerOption`/`Segment` tábla, hanem egyetlen `content` mező (séma: `app/QuizConfig/Schema/quiz-config.schema.json`), benne:
+  - `labels`: pontozási dimenziók
+  - `questions`: kérdések, opciónként `label_weights`-szel
+  - `evaluation_groups`: a „szegmensek” — szabályalapú találati feltétellel (`RuleExpressionInterpreter`: `label_sum`-összehasonlítás, `answer_selected`, `module_top_rank`, `or`-kombinátor), prioritás szerint sorba rendezve, pontosan egy `is_fallback` csoporttal; mindegyikhez `result_page` (cím, összefoglaló, szekciók, videó, CTA)
+  - `modules`: relevancia-pontozott tartalmi blokkok a legjobb találatokból, amik az utánkövető emailekbe kerülnek
+  - `emails`: `sequences` / `default_sequence` / `shared_blocks` / `module_content` — a teljes email-tartalom séma szinten már modellezve van, de a **tényleges kiküldés még nincs megírva** (ld. Tervezett szakasz)
+  - `generation_trace`: ha a dokumentum LLM-mel készült, ennek forrása/utasítása/modellje
+  - `content_hash`, `version_id`, `created_at`, `created_by`, `status`: mentéskor felülírt metaadatok
+  - Két szintű validáció: `ConfigSchemaValidator` (séma-alak, `opis/json-schema`-val) minden mentéskor fut; a teljesebb `ConfigValidator` (referenciák, elérhetőség, kiegyensúlyozottság) csak az aktiválás átmenetén.
+- `QuizSession`: egy látogató egy kitöltése — válaszok (+ `answers_hash` integritásellenőrzéshez), kiértékelt eredmény (`label_sums`, `matched_group_ids`, `ranked_modules`), `is_preview` (admin-előnézet nem számít valódi forgalomnak), `is_bot_suspected`.
+- `QuizEvent`: csak hozzáfűzhető eseménynapló egy `QuizSession`-höz és `ConfigVersion`-höz. Ténylegesen diszpécselt típusok: `SessionStarted`, `QuestionShown`, `QuestionAnswered`, `EvaluationCompleted`, `ResultPageViewed`. Az enum tartalmaz még `EmailProvided` / `CtaClicked` / `EmailSent` / `EmailOpened` értékeket is, de ezeket **sehol nem diszpécseljük még** — a Lead/email-küldés bekötésére vannak fenntartva.
+- `VisitorToken`: session-alapú (nem tartós cookie) látogatóazonosító; ugyanaz a token mindig ugyanazt az aktív variánst kapja.
+- `VariantSelector`: a kampány `Active` állapotú `ConfigVersion`-jei közül `traffic_weight` szerint súlyozva, determinisztikusan választ a `VisitorToken` alapján — ez az A/B-teszt mechanizmus.
+- `EvaluationEngine` / `RuleExpressionInterpreter`: a kiértékelés teljesen determinisztikus és szabályalapú, nincs benne futásidejű AI-hívás.
+- `FeedbackGenerator` kontraktus (`app/Contracts`) + `FakeFeedbackGenerator` / `AnthropicFeedbackGenerator` implementáció (`app/Services/Generation`): **szerkesztési időben** segít az adminnak `ConfigVersion`-dokumentumot generálni forrásanyagból és utasításból (Filament „Generálás forrásból” akció, mindig admin saját szakmai anyaga, soha nem látogatói adat) — a human utána még átnézi, szerkeszti, csak azután menti. Driver configból jön (`FEEDBACK_GENERATOR_DRIVER`, alapértelmezett `fake`). Az Anthropic implementáció streamelt kérést küld (`stream: true`) — nem-streamelt kéréssel a nagy `max_tokens` és az alapértelmezetten bekapcsolt adaptív gondolkodás miatt rendszeresen kliensoldali időtúllépést kaptunk. **Ez nem ugyanaz, mint a lenti „Nyitott döntések” AI-alapú, futásidejű, látogatónkénti személyre szabott visszajelzés kérdése — az továbbra is teljesen nyitott és megépítetlen.**
 
-### Lead állapotgép
+### `ConfigVersion` állapotgép
 
 | Állapot | Jelentés | Megengedett átmenetek |
 |---|---|---|
-| `Anonymous` | kvíz kitöltve, nincs email | `Nurture`, `OfferSent`, `CallBooked` |
-| `Nurture` | van email, tartalmakat kap | `OfferSent`, `CallBooked`, `Unsubscribed` |
-| `OfferSent` | csomagajánlat elküldve | `CallBooked`, `Purchased`, `Nurture`, `Unsubscribed` |
-| `CallBooked` | ingyenes hívás lefoglalva | `CallCompleted`, `NoShow`, `Unsubscribed` |
-| `NoShow` | nem jelent meg a hívásra | `CallBooked`, `Nurture`, `Unsubscribed` |
-| `CallCompleted` | hívás megtörtént, döntési határidő fut | `Purchased`, `Considering`, `Nurture`, `Unsubscribed` |
-| `Considering` | gondolkodik | `Purchased`, `Nurture`, `Unsubscribed` |
-| `Purchased` | vásárolt, kurzus folyamatban | `Completed`, `RefundRequested` |
-| `RefundRequested` | visszatérítést kért | `Refunded`, `Purchased` |
-| `Refunded` | visszatérítve | végállapot |
-| `Completed` | kurzus befejezve (vélemény, ajánlás) | végállapot |
-| `Unsubscribed` | leiratkozott | végállapot, semmilyen levél nem mehet |
+| `Draft` (alapértelmezett) | szerkeszthető, `content` bármikor felülírható | `Active` |
+| `Active` | publikált, forgalmat kaphat (a `VariantSelector` választhatja) | `Paused`, `Archived` |
+| `Paused` | átmenetileg nem kap forgalmat | `Active`, `Archived` |
+| `Archived` | végállapot | — |
 
 Szabályok:
 
-- Állapotot csak átmeneten keresztül válts (`$lead->state->transitionTo(...)`), a `state` oszlopot soha ne írd közvetlenül.
-- Minden átmenet ugyanabban a DB-tranzakcióban `LeadEvent`-et ír.
-- Az állapot azt mondja meg, hol tart a lead. A teendőket nem az állapot, hanem a `FollowUpRule`-ok hozzák létre időalapon.
-- Vásárlás után a marketing-hozzájárulás visszavonása nem állapotváltás, hanem a `marketing_consent_withdrawn_at` mező; a kurzushoz tartozó tranzakciós levelek továbbra is mennek.
-- A táblázat kiinduló változat. A mérvadó leírás a `tests/Feature/StateMachine/LeadTransitionsTest.php`; ha a kettő eltér, a teszt a hiteles, és jelezd az eltérést.
+- Csak `Draft` tartalma szerkeszthető helyben (`updateDraftDocument()`); publikált verzió tartalma soha nem módosul. Ha egy publikált verziót módosítani kell, `cloneAsNewDraft()`-tal kell belőle új draftot csinálni.
+- Az aktiválás (`ActivateConfigVersion` átmenet) lefuttatja a teljes `ConfigValidator`-t, nem csak a séma-alakot; érvénytelen dokumentum esetén `ConfigVersionNotValidException`-t dob, és az átmenet nem történik meg.
+- Egy kampánynak egyszerre több `Active` verziója is lehet (`traffic_weight` szerinti A/B-teszt); az `experiment_compatible_with_previous` mező jelzi, hogy az eredmények összevethetők-e egy korábbi verzióval.
+- A mérvadó leírás a `tests/Feature/Scenarios/AdminConfigManagementTest.php`-ban lévő eseteké (nincs külön dataset-alapú állapotgép-teszt fájl); ha ez a táblázat és a teszt eltér, a teszt a hiteles, és jelezd az eltérést.
 
-### Időzített logika
+## Admin (Filament)
 
-- A `funnel:process-deadlines` parancs az ütemezőben 5 percenként fut, és a lejárt `FollowUpRule`-ok alapján teendőt hoz létre. Idempotens: ugyanarra a szabályra és leadre kétszer nem hoz létre teendőt.
-- Teendő lezárása esemény, ami átmenetet is kiválthat (pl. hívás teendő lezárása → `CallCompleted`).
-- Hosszú várakozásra ne használj késleltetett jobot. Az időalapú logika mindig az adatbázisban tárolt időpontokból számol, így tesztben időutazással ellenőrizhető.
+Jelenleg: `CampaignResource` és `ConfigVersionResource` (utóbbi a kampány alá ágyazott `ConfigVersionsRelationManager`-en keresztül is elérhető), egy „Emailek előnézete” oldal, és a fenti LLM-alapú generálás akció. A kezdőoldal egyelőre a Filament alap `Dashboard` — **a napi teendőlista még nincs megépítve** (ld. Tervezett szakasz).
 
-### Külső szolgáltatások
-
-- Minden szolgáltatás interfész mögött van: `app/Contracts` (pl. `PaymentGateway`, `InvoiceProvider`, `AdsPlatform`, `FeedbackGenerator`), implementáció az `app/Services/{Terület}/` alatt.
-- Minden interfésznek van `Fake…` implementációja, a driver a configból jön (pl. `PAYMENT_DRIVER=fake`). Lokálisan és tesztben a fake az alapértelmezett.
-- Controller, Filament resource és job csak az interfészt kapja (DI), SDK-t közvetlenül nem hív.
-- Webhook: a nyers payload mentése (`spatie/laravel-webhook-client`), feldolgozás queue jobban, idempotensen (a szolgáltató eseményazonosítója egyedi).
-- Időpontfoglalás: Cal.com; a foglalás webhookja váltja a lead állapotát `CallBooked`-ra.
+Csapda, amibe ebben a projektben már belefutottunk: egy resource formját ha relation manageren keresztül is szerkeszthetővé teszed, a Filament alapértelmezett `EditAction` **nem** ugyanazt a kitöltés/mentés logikát futtatja, mint az oldal saját `EditRecord`-ja (`mutateFormDataBeforeFill` / `handleRecordUpdate`) — alapból nyers `attributesToArray()`-t tölt be és `$record->update()`-tel ment. Ha egy mezőnek egyedi kitöltési/mentési logikája van (pl. `ConfigVersion::content` JSON-string ↔ array cast), azt mindkét helyen ugyanúgy kell futtatni (ld. `ConfigVersionResource::mutateFormDataBeforeFill()` / `saveFormData()`), különben a mező nyers PHP-tömbként — a böngészőben `[object Object]`-ként — jelenik meg, mentéskor pedig megkerüli a domain-logikát.
 
 ## Frontend
 
-- Publikus felület: ez a „szép” felület, egyedi design Tailwinddel, mobile-first, gyors betöltéssel. JavaScript csak ahol kell (a kvíz léptetése Alpine-nal). Hirdetési és analitikai script csak süti-hozzájárulás után töltődhet be.
-- Admin (Filament): a kezdőoldal a napi teendőlista (lejárt és mai teendők), egy kattintással lezárható teendőkkel. Egyszerű, magyar nyelvű felület, kevés mező, érthető címkék.
+- Publikus felület: egyedi design Tailwinddel, mobile-first. JavaScript csak ahol kell (a kvíz léptetése Alpine-nal, `x-data`-val). Dinamikus értéket `x-data`-ba mindig `Illuminate\Support\Js::from()`-mal ágyazz be, soha `@json()`-nal egy dupla idézőjeles attribútumba — a `@json()` saját idézőjelei idő előtt lezárják az attribútumot, és csendben, futásidőben derül csak ki (Alpine JS-hiba a böngésző konzolján, pl. „step is not defined”).
+- Hirdetési és analitikai script csak süti-hozzájárulás után töltődhetne be — ez még nincs megépítve (nincs hirdetési integráció, ld. Tervezett szakasz), de ha épül, ez a szabály rá is vonatkozik.
+- Admin (Filament): egyszerű, magyar nyelvű felület, kevés mező, érthető címkék.
 
 ## Konvenciók
 
 - A felület nyelve magyar (fordítások a `lang/hu` alatt); kód, azonosítók, kommentek és commit üzenetek angolul.
-- Pénzösszeg egész számként, forintban, soha nem float.
+- Pénzösszeg egész számként, forintban, soha nem float. (Egyelőre nincs a sémában ár/pénzösszeg mező — ez a szabály a jövőbeli `Package`/fizetés munkára vonatkozik.)
 - Adatbázisban UTC; megjelenítés és határidő-számítás `Europe/Budapest` szerint.
 - `env()` csak a `config/` fájlokban.
 - Új composer vagy npm csomagot csak egyeztetés után vegyél fel.
@@ -106,37 +102,39 @@ Szabályok:
 
 ## Adatvédelem
 
+Ezek standing szabályok — a mögöttük lévő funkciók egy része (hirdetési integráció, email-küldés, Lead) még nincs megépítve, de tervezéskor és építéskor is tartsd be őket.
+
 - A kvízválaszok különleges kategóriájú (pl. egészségügyi) adatnak minősülhetnek. Kvízválasz és szegmens soha nem mehet hirdetési platformra (Meta Pixel, Conversions API); oda csak semleges konverziós esemény mehet (pl. „kvíz kitöltve”, „email megadva”).
 - Marketing levél csak double opt-in hozzájárulás után, minden marketing levélben leiratkozó linkkel.
 - Személyes adat nem kerülhet logba.
-- Törlési kérelemnél a lead anonimizálódik; az események személyes adat nélkül megmaradnak a statisztikához.
-- AI szolgáltatónak személyes adat vagy kvízválasz csak kifejezett döntés után mehet (lásd: Nyitott döntések).
+- Törlési kérelemnél a Lead (ha megépül) anonimizálódik; az események személyes adat nélkül megmaradnak a statisztikához.
+- AI szolgáltatónak személyes adat vagy kvízválasz csak kifejezett döntés után mehet (lásd: Nyitott döntések). A meglévő `FeedbackGenerator`/Anthropic-integráció ezt nem sérti: csak az admin által megadott szerkesztési célú forrásanyagot és utasítást küldi, látogatói adatot vagy kvízválaszt soha.
 
 ## Tesztelés
 
-Két teszttípus védi a rendszert:
+A rendszert elsősorban két teszttípus védi:
 
-1. **Forgatókönyv-tesztek** (`tests/Feature/Scenarios/`): a funnel egy-egy útvonala HTTP-n keresztül, valódi Postgresen, fake külső szolgáltatásokkal és időutazással. Kívülről írják le a viselkedést, a belső felépítést nem ismerik.
-2. **Állapotgép-teszt** (`tests/Feature/StateMachine/LeadTransitionsTest.php`): Pest dataset az összes megengedett és tiltott átmenettel.
+1. **Forgatókönyv-tesztek** (`tests/Feature/Scenarios/`): a funnel egy-egy útvonala HTTP-n/Livewire-n keresztül, valódi Postgresen, fake külső szolgáltatásokkal és időutazással. Kívülről írják le a viselkedést, a belső felépítést nem ismerik.
+2. **Unit- és motor-tesztek** (`tests/Unit/`): tiszta, determinisztikus logikára (séma-/config-validátorok, `EvaluationEngine`/`RuleExpressionInterpreter`, `FeedbackGenerator`-implementációk) proaktívan íródnak, nem csak kérésre — ez már a tényleges gyakorlat, nem csak engedmény.
 
-Unit tesztet csak kérésre írj.
+Emellett van egy harmadik, kevésbé szigorú kategória: `tests/Feature/QuizConfig/` — modell-/motorközeli feature tesztek (pl. `ConfigVersionTest`, `QuizSessionTest`, `FunnelQueriesTest`), amik nem admin/publikus flow-t írnak le végponttól végpontig, de DB-t használnak. Ezekre a fenti védelmi szabály (ld. lent) nem vonatkozik olyan szigorúan, mint a Scenarios/ könyvtárra.
 
 ### Szabályok
 
-- Meglévő tesztet ebben a két könyvtárban NEM módosíthatsz és nem törölhetsz azért, hogy átmenjen. Ha egy változtatás miatt szükséges, állj meg, és magyarázd el, mi és miért változna. Ez shellen keresztül is érvényes: ne kerüld meg `sed`-del vagy fájlírással.
-- Új funkciónál: először a forgatókönyv-tesztet írd meg és futtasd (el kell buknia), mutasd meg, és csak jóváhagyás után implementálj.
+- Meglévő tesztet a `tests/Feature/Scenarios/` könyvtárban NEM módosíthatsz és nem törölhetsz azért, hogy átmenjen. Ha egy változtatás miatt szükséges, állj meg, és magyarázd el, mi és miért változna. Ez shellen keresztül is érvényes: ne kerüld meg `sed`-del vagy fájlírással. (Ha a jövőben lesz dedikált dataset-alapú állapotgép-teszt fájl — pl. Lead-átmenetekre —, ugyanez a védelem vonatkozzon rá is.)
+- Új funkciónál: először a forgatókönyv-tesztet írd meg és futtasd (el kell buknia), mutasd meg, és csak jóváhagyás után implementálj. Tiszta hibajavításnál ez nem kötelező, de a hibát reprodukáló regressziós teszt így is elvárt.
 - Egy feladat akkor kész, ha a `./vendor/bin/sail pint --dirty` lefutott, és a `./vendor/bin/sail artisan test --parallel` zöld.
-- A CI (GitHub Actions) ugyanezt futtatja Postgres service-szel; a `main` ágra csak zöld PR kerül.
+- A CI (`.github/workflows/ci.yml`) minden push-nál és pull requestnél lefuttatja a teljes csomagot Postgres service-szel.
 
 ### Gyorsaság
 
 - Iteráció közben csak az érintett tesztet futtasd (`--filter`), a teljes csomagot a végén, párhuzamosan.
-- Hálózat tilos: a `tests/Pest.php` globálisan hívja a `Http::preventStrayRequests()`-et. A külső válaszok a `tests/Fixtures/{provider}/*.json` fájlokból jönnek (sandboxból mentett valódi payloadok).
+- Hálózat tilos: a `tests/Pest.php` globálisan hívja a `Http::preventStrayRequests()`-et (Feature és Unit csoportra is). A külső válaszok a `tests/Fixtures/{provider}/*` fájlokból jönnek (pl. `tests/Fixtures/anthropic/messages-stream-response.txt`).
 - Idő: `$this->travel()` és `$this->freezeTime()`, soha `sleep`.
 - Tesztben nincs frontend build: a base `TestCase` `withoutVite()`-ot hív.
 - A `phpunit.xml`-ben: `QUEUE_CONNECTION=sync`, `MAIL_MAILER=array`, cache és session `array`.
-- `RefreshDatabase` tranzakcióval; ha a migrációk száma megnő, `schema:dump`.
-- Tesztadat factory-kkal, olvasható state-ekkel (pl. `Lead::factory()->inState(OfferSent::class)`); közös tesztsegédek a `tests/Support/` alatt (pl. `QuizAnswers::forSegment('B')`).
+- `RefreshDatabase` (csak a Feature csoportra); ha a migrációk száma megnő, `schema:dump`.
+- Tesztadat factory-kkal; közös tesztsegédek a `tests/Support/` alatt (pl. `QuizConfigFixture::example()` egy érvényes teljes dokumentumért).
 
 ## Lokális fejlesztés
 
@@ -144,9 +142,8 @@ Unit tesztet csak kérésre írj.
 - A `D:\Projects\marketing-tool` egy 2026-09-11 előtti, elavult másolat (natív Windows + Docker Desktop bind mount alatt jött létre, mielőtt a projekt átköltözött WSL-re) — ne onnan dolgozz tovább, biztonságosan törölhető.
 - A `vendor/laravel/sail/bin/sail` szkriptet egy `composer.json` `post-autoload-dump` hook (`scripts/patch-sail-for-windows.php`) foltozza, hogy Git Bash/MSYS alól (natív Windows) is fusson — ez a WSL2 alatti natív Linuxon ártalmatlan no-op, csak akkor kell, ha valaki mégis natív Windows alól futtatná.
 - A lokális Postgres a `compose.yaml`-ban `fsync=off`, `synchronous_commit=off`, `full_page_writes=off` kapcsolókkal fut (csak fejlesztéshez).
-- `migrate:fresh --seed`: demó kampány kvízzel és szegmensekkel, minden állapotban legalább egy leaddel, valamint admin felhasználó (`admin@example.com` / `password`).
-- A `.env.example`-ben minden külső szolgáltatás `fake` driverrel szerepel. Valódi sandbox kulcsok csak a `.env`-ben vannak; azt ne olvasd, új kulcsot a `.env.example`-be vegyél fel.
-- Csak lokális környezetben elérhető: `funnel:shift-time {lead} {--days=}`, ami a lead időpontjait eltolja, hogy a határidős folyamatok kézzel is kipróbálhatók legyenek.
+- `migrate:fresh --seed`: jelenleg csak egy admin felhasználót hoz létre (`admin@example.com` / `password`). Demó kampány/kvíz/leadek seedelése még nincs megírva — jó ötlet lenne (ld. Tervezett szakasz).
+- A `.env.example`-ben minden külső szolgáltatás `fake`/üres driverrel szerepel (pl. `FEEDBACK_GENERATOR_DRIVER=fake`). Valódi sandbox kulcsok csak a `.env`-ben vannak; azt ne olvasd, új kulcsot a `.env.example`-be vegyél fel.
 
 ## Nyitott döntések – ezekben ne dönts helyettünk, kérdezz
 
@@ -154,12 +151,43 @@ Unit tesztet csak kérésre írj.
 - Fizetés: Barion, SimplePay vagy Stripe
 - Számlázás: Számlázz.hu vagy Billingo
 - Emailküldő (Postmark, Resend, Brevo), és hogy a sorozatokat mi építjük, vagy Brevo/MailerLite kezeli
-- Személyre szabott visszajelzés: kezdetben szabályalapú; AI csak később, ellenőrzött kimenettel
+- Személyre szabott, **futásidejű, látogatónkénti** visszajelzés: kezdetben szabályalapú (ez van most); AI csak később, ellenőrzött kimenettel. Fontos: ez különbözik a már megépített, szerkesztési idejű `FeedbackGenerator`-tól (ld. Architektúra) — az admin oldali config-generálás AI-val nem dönti el ezt a kérdést.
 - Hosting
 
-## Első mérföldkő
+## Tervezett, még nincs kódban — jó ötletek a korábbi tervezésből, egyeztetés után érdemes megépíteni
 
-Kampány + kvíz + eredményoldal (szegmens-visszajelzés, videó) + email-megadás double opt-innel + Lead állapotgéppel és eseménynaplóval + Filament lead-lista és napi teendőlista + Cal.com foglalási link. Fizetés, számlázás és hirdetés-API később jön.
+- **`Lead` entitás + állapotgép.** A kitöltő; email nélkül is létrejön. Korábbi tervezet:
+
+  | Állapot | Jelentés | Megengedett átmenetek |
+  |---|---|---|
+  | `Anonymous` | kvíz kitöltve, nincs email | `Nurture`, `OfferSent`, `CallBooked` |
+  | `Nurture` | van email, tartalmakat kap | `OfferSent`, `CallBooked`, `Unsubscribed` |
+  | `OfferSent` | csomagajánlat elküldve | `CallBooked`, `Purchased`, `Nurture`, `Unsubscribed` |
+  | `CallBooked` | ingyenes hívás lefoglalva | `CallCompleted`, `NoShow`, `Unsubscribed` |
+  | `NoShow` | nem jelent meg a hívásra | `CallBooked`, `Nurture`, `Unsubscribed` |
+  | `CallCompleted` | hívás megtörtént, döntési határidő fut | `Purchased`, `Considering`, `Nurture`, `Unsubscribed` |
+  | `Considering` | gondolkodik | `Purchased`, `Nurture`, `Unsubscribed` |
+  | `Purchased` | vásárolt, kurzus folyamatban | `Completed`, `RefundRequested` |
+  | `RefundRequested` | visszatérítést kért | `Refunded`, `Purchased` |
+  | `Refunded` | visszatérítve | végállapot |
+  | `Completed` | kurzus befejezve (vélemény, ajánlás) | végállapot |
+  | `Unsubscribed` | leiratkozott | végállapot, semmilyen levél nem mehet |
+
+  Tervezett szabályok: állapotot csak átmeneten keresztül váltani (`$lead->state->transitionTo(...)`); minden átmenet ugyanabban a DB-tranzakcióban `LeadEvent`-et ír (a `QuizEvent` mintájára, vagy azzal összevonva); az állapot azt mondja meg, hol tart a lead, a teendőket a `FollowUpRule`-ok hozzák létre időalapon; vásárlás utáni marketing-hozzájárulás visszavonása nem állapotváltás, hanem `marketing_consent_withdrawn_at` mező (a kurzushoz tartozó tranzakciós levelek továbbra is mennek).
+- **`FollowUpRule`** (kampányonkénti időszabály, pl. „`OfferSent` után 3 nap → email teendő, 7 nap → hívás teendő”) + **`Task`** (a szakember teendője: típus, esedékesség, lead, lezárás) + **Filament napi teendőlista** admin kezdőlapként (lejárt és mai teendők, egy kattintással lezárhatók).
+- **`funnel:process-deadlines`** ütemezett (5 percenként), idempotens parancs, ami a lejárt `FollowUpRule`-ok alapján teendőt hoz létre (ugyanarra a szabályra/leadre kétszer nem). Teendő lezárása esemény, ami átmenetet is kiválthat (pl. hívás teendő lezárása → `CallCompleted`). Hosszú várakozásra ne késleltetett job kelljen — az időalapú logika mindig az adatbázisban tárolt időpontokból számoljon, hogy tesztben időutazással ellenőrizhető legyen.
+- Csak lokális környezetben elérhető **`funnel:shift-time {lead} {--days=}`** dev segédparancs, ami a lead időpontjait eltolja, hogy a határidős folyamatok kézzel is kipróbálhatók legyenek.
+- **Email-megadás** double opt-in-nel + **leiratkozás** route a publikus felületen (`routes/web.php`).
+- **`PaymentGateway` / `InvoiceProvider` / `AdsPlatform`** kontraktusok `app/Contracts` alatt, `Fake…` implementációval és config-driven driverrel (a `FeedbackGenerator` már megépített mintája szerint) — Controller/Filament resource/job csak az interfészt kapja (DI), SDK-t sosem hív közvetlenül. A webhook-infrastruktúra (`spatie/laravel-webhook-client`) már telepítve van, csak szolgáltató nincs rákötve; feldolgozás queue jobban, idempotensen (a szolgáltató eseményazonosítója egyedi).
+- **Cal.com időpontfoglalás**: a foglalás webhookja váltja a Lead állapotát `CallBooked`-ra.
+- **`Package`** modell (ár, alkalmak száma és hossza, garancia; több kampány is használhatja) — jelenleg a séma nem tartalmaz ár-/csomagadatot.
+- Gazdagabb `migrate:fresh --seed`: demó kampány kvízzel, minden `ConfigVersion`-állapotban legalább egy példány, és (miután a `Lead` megépült) Lead minden állapotban.
+
+## Első mérföldkő — állapot
+
+**Kész:** kampány + kvíz + eredményoldal (szegmens-visszajelzés, videó); admin kampány- és configverzió-kezelés Filamenttel, LLM-segített config-generálással; eseménynapló és alap funnel-lekérdezések.
+
+**Hiányzik:** email-megadás double opt-innel, Lead állapotgép és eseménynapló, Filament lead-lista és napi teendőlista, Cal.com foglalási link. Fizetés, számlázás és hirdetés-API továbbra is később jön.
 
 ===
 
